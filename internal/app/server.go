@@ -522,7 +522,11 @@ func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, map[string]interface{}{"url": u, "name": name, "proxy": "/download?fsid=" + fsid})
+	proxy := "/download?fsid=" + url.QueryEscape(fsid)
+	if strings.TrimSpace(name) != "" {
+		proxy += "&name=" + url.QueryEscape(name)
+	}
+	writeJSON(w, map[string]interface{}{"url": u, "name": name, "proxy": proxy})
 }
 
 func (s *Server) download(w http.ResponseWriter, r *http.Request) {
@@ -554,6 +558,9 @@ func (s *Server) streamBaiduFile(w http.ResponseWriter, r *http.Request, inline 
 	if err != nil {
 		fail(w, 500, err.Error())
 		return
+	}
+	if requestedName := strings.TrimSpace(r.URL.Query().Get("name")); requestedName != "" {
+		name = requestedName
 	}
 	form := url.Values{"access_token": {cfg.Token.AccessToken}}
 	req, err := http.NewRequest("POST", u, strings.NewReader(form.Encode()))
@@ -592,7 +599,7 @@ func (s *Server) streamBaiduFile(w http.ResponseWriter, r *http.Request, inline 
 		disposition = "inline"
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Content-Disposition", disposition+`; filename="`+strings.ReplaceAll(name, `"`, `'`)+`"`)
+	w.Header().Set("Content-Disposition", contentDisposition(disposition, name))
 	w.Header().Set("Accept-Ranges", "bytes")
 	if cr := resp.Header.Get("Content-Range"); cr != "" {
 		w.Header().Set("Content-Range", cr)
@@ -604,6 +611,36 @@ func (s *Server) streamBaiduFile(w http.ResponseWriter, r *http.Request, inline 
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func contentDisposition(disposition, name string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	if base == "." || base == "/" || base == "" {
+		base = "download"
+	}
+	fallback := asciiFilename(base)
+	return disposition + `; filename="` + fallback + `"; filename*=UTF-8''` + url.PathEscape(base)
+}
+
+func asciiFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r >= 32 && r <= 126 && r != '"' && r != '\\' && r != ';' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('_')
+	}
+	fallback := strings.Trim(b.String(), " .")
+	if fallback == "" {
+		ext := filepath.Ext(name)
+		if ext != "" && ext != name {
+			fallback = "download" + ext
+		} else {
+			fallback = "download"
+		}
+	}
+	return fallback
 }
 
 func (s *Server) requireToken(w http.ResponseWriter) (Config, bool) {

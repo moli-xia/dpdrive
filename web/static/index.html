@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>度盘</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=20260617-ios-preview">
+  <link rel="stylesheet" href="/static/style.css?v=20260617-download-name">
 </head>
 <body class="login-mode">
   <div id="appShell" class="app-shell">
@@ -17,8 +17,6 @@
       <button data-tab="drive" class="nav active"><span class="nav-icon">D</span>网盘</button>
       <button data-tab="auth" class="nav"><span class="nav-icon">A</span>授权配置</button>
       <button data-tab="settings" class="nav"><span class="nav-icon">S</span>设置</button>
-      <div class="side-spacer"></div>
-      <button id="adminLogout" class="ghost">退出后台</button>
     </aside>
 
     <main>
@@ -69,6 +67,24 @@
           <thead><tr><th class="select-col"><input id="selectAll" type="checkbox" aria-label="全选文件"></th><th>名称</th><th>大小</th><th>修改时间</th><th>下载</th></tr></thead>
           <tbody id="files"></tbody>
         </table>
+        <div class="pager">
+          <div class="pager-size">
+            <span>每页</span>
+            <select id="pageSize" aria-label="每页显示数量">
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
+          <div id="pagerInfo" class="pager-info">第 1 / 1 页</div>
+          <div class="pager-actions">
+            <button id="firstPage" class="ghost" type="button">首页</button>
+            <button id="prevPage" class="ghost" type="button">上一页</button>
+            <button id="nextPage" class="ghost" type="button">下一页</button>
+            <button id="lastPage" class="ghost" type="button">末页</button>
+          </div>
+        </div>
         <div id="empty" class="empty">当前目录为空</div>
       </div>
     </section>
@@ -100,6 +116,7 @@
           <label>后台账号<input id="adminUser" value="admin"></label>
           <label>后台密码<input id="adminPass" type="password" placeholder="留空则不修改"></label>
           <button id="saveSettings">保存设置</button>
+          <button id="adminLogout" class="ghost settings-logout" type="button">退出后台</button>
         </div>
       </div>
     </section>
@@ -150,11 +167,14 @@
         <button id="zoomOut" class="ghost" type="button">缩小</button>
         <button id="zoomReset" class="ghost" type="button">适应</button>
         <button id="zoomIn" class="ghost" type="button">放大</button>
+        <button id="togglePreviewMax" class="ghost" type="button">最大化</button>
         <button id="closePreview" class="ghost" type="button">关闭</button>
       </div>
     </header>
     <div id="previewStage" class="preview-stage">
-      <img id="previewImage" alt="图片预览">
+      <div id="previewCanvas" class="preview-canvas">
+        <img id="previewImage" alt="图片预览">
+      </div>
     </div>
     <footer>
       <button id="previewDownload" type="button">下载</button>
@@ -243,6 +263,6 @@
 
   <label id="uploadFab" class="upload-fab" title="上传文件">+<input id="file" type="file" multiple></label>
   <div id="toast"></div>
-  <script src="/static/app.js?v=20260617-ios-preview"></script>
+  <script src="/static/app.js?v=20260617-download-name"></script>
 </body>
 </html>

@@ -12,6 +12,8 @@ let currentItems = [];
 let currentImages = [];
 let currentVideos = [];
 let currentAudios = [];
+let currentPage = 1;
+let pageSize = 50;
 let previewIndex = -1;
 let videoIndex = -1;
 let audioIndex = -1;
@@ -247,24 +249,40 @@ async function loadFiles(path = currentPath) {
   renderPathCrumbs(currentPath);
   const data = await api("/api/files?path=" + encodeURIComponent(currentPath));
   selected.clear();
-  const tbody = $("files");
-  tbody.innerHTML = "";
   const items = data.list || [];
   currentItems = items;
   currentImages = items.filter(item => !item.isdir && isImage(itemName(item)));
   currentVideos = items.filter(item => !item.isdir && isVideo(itemName(item)));
   currentAudios = items.filter(item => !item.isdir && isAudio(itemName(item)));
+  currentPage = 1;
   $("metricItems").textContent = String(items.length);
   $("tableHint").textContent = `当前根目录：${data.root || "/"}，实际路径：${data.realPath || currentPath}`;
   $("empty").style.display = items.length ? "none" : "block";
-  for (const item of items) {
+  renderFilePage();
+}
+
+function totalPages() {
+  return Math.max(1, Math.ceil(currentItems.length / pageSize));
+}
+
+function pageItems() {
+  const start = (currentPage - 1) * pageSize;
+  return currentItems.slice(start, start + pageSize);
+}
+
+function renderFilePage() {
+  const tbody = $("files");
+  tbody.innerHTML = "";
+  currentPage = Math.min(Math.max(1, currentPage), totalPages());
+  const visibleItems = pageItems();
+  for (const item of visibleItems) {
     const tr = document.createElement("tr");
     const fsid = String(item.fs_id);
     const name = item.server_filename || basename(item.rel_path);
     const kind = fileKind(name, item.isdir);
     tr.dataset.path = item.rel_path;
     tr.innerHTML = `
-      <td class="select-col"><input class="row-select" type="checkbox" data-path="${escapeAttr(item.rel_path)}" aria-label="选择 ${escapeAttr(name)}"></td>
+      <td class="select-col"><input class="row-select" type="checkbox" data-path="${escapeAttr(item.rel_path)}" aria-label="选择 ${escapeAttr(name)}" ${selected.has(item.rel_path) ? "checked" : ""}></td>
       <td><button class="file-name" title="${escapeAttr(name)}"><span class="file-icon ${kind.cls}" aria-hidden="true"><span></span></span><span class="file-main"><strong>${escapeAttr(name)}</strong><small>${kind.label}</small></span></button></td>
       <td>${item.isdir ? "-" : escapeAttr(item.size_text)}</td>
       <td>${escapeAttr(item.mtime_text || "")}</td>
@@ -279,7 +297,7 @@ async function loadFiles(path = currentPath) {
     if (downloadBtn) {
       downloadBtn.onclick = (e) => {
         e.stopPropagation();
-        openDownload(fsid);
+        openDownload(fsid, name);
       };
     }
     tr.oncontextmenu = (e) => {
@@ -288,8 +306,28 @@ async function loadFiles(path = currentPath) {
     };
     tbody.appendChild(tr);
   }
+  updatePager();
   updateSelectionHint();
   syncSelectAll();
+}
+
+function updatePager() {
+  const total = currentItems.length;
+  const pages = totalPages();
+  const start = total ? (currentPage - 1) * pageSize + 1 : 0;
+  const end = Math.min(currentPage * pageSize, total);
+  $("pagerInfo").textContent = total
+    ? `第 ${currentPage} / ${pages} 页，显示 ${start}-${end}，共 ${total} 项`
+    : "第 1 / 1 页，共 0 项";
+  $("firstPage").disabled = currentPage <= 1;
+  $("prevPage").disabled = currentPage <= 1;
+  $("nextPage").disabled = currentPage >= pages;
+  $("lastPage").disabled = currentPage >= pages;
+}
+
+function goPage(page) {
+  currentPage = Math.min(Math.max(1, page), totalPages());
+  renderFilePage();
 }
 
 function itemName(item) {
@@ -329,18 +367,18 @@ function updateSelectionHint() {
 function syncSelectAll() {
   const checkAll = $("selectAll");
   if (!checkAll) return;
-  const total = currentItems.length;
-  const count = currentItems.reduce((sum, item) => sum + (selected.has(item.rel_path) ? 1 : 0), 0);
+  const items = pageItems();
+  const total = items.length;
+  const count = items.reduce((sum, item) => sum + (selected.has(item.rel_path) ? 1 : 0), 0);
   checkAll.checked = total > 0 && count === total;
   checkAll.indeterminate = count > 0 && count < total;
   checkAll.disabled = total === 0;
 }
 
 function setAllSelected(checked) {
-  selected.clear();
-  if (checked) {
-    currentItems.forEach(item => selected.add(item.rel_path));
-  }
+  pageItems().forEach(item => {
+    checked ? selected.add(item.rel_path) : selected.delete(item.rel_path);
+  });
   document.querySelectorAll("#files .row-select").forEach(input => {
     input.checked = checked;
   });
@@ -363,9 +401,12 @@ function selectedPaths() {
   return Array.from(selected);
 }
 
-async function openDownload(fsid) {
+async function openDownload(fsid, name = "") {
   const a = document.createElement("a");
-  a.href = "/download?fsid=" + encodeURIComponent(fsid);
+  const params = new URLSearchParams({fsid: String(fsid)});
+  if (name) params.set("name", name);
+  a.href = "/download?" + params.toString();
+  if (name) a.download = name;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
@@ -411,14 +452,16 @@ function openFile(item, name, fsid) {
     previewText(fsid, name, item.rel_path);
     return;
   }
-  openDownload(fsid);
+  openDownload(fsid, name);
 }
 
 async function shareFile(fsid, name) {
   const d = await api("/api/download-link?fsid=" + encodeURIComponent(fsid));
+  const local = new URL(location.origin + "/d/" + encodeURIComponent(fsid));
+  if (d.name || name) local.searchParams.set("name", d.name || name);
   shareLinks = {
     native: d.url || "",
-    local: location.origin + "/d/" + encodeURIComponent(fsid)
+    local: local.toString()
   };
   $("shareTitle").textContent = name ? "分享：" + name : "分享";
   $("nativeShareLink").value = shareLinks.native || "暂无";
@@ -435,12 +478,26 @@ async function previewImage(fsid, name) {
 
 async function openImage(fsid, name) {
   previewFile = {fsid, name};
+  const image = $("previewImage");
+  const stage = $("previewStage");
+  const canvas = $("previewCanvas");
   $("previewTitle").textContent = name || "图片预览";
-  $("previewImage").removeAttribute("src");
-  $("previewImage").src = "/preview?fsid=" + encodeURIComponent(fsid);
-  setImageZoom(1);
+  $("imagePreview").classList.remove("is-maximized");
+  $("togglePreviewMax").textContent = "最大化";
+  imageZoom = 1;
+  stage.scrollLeft = 0;
+  stage.scrollTop = 0;
+  image.onload = () => requestAnimationFrame(() => fitImageToStage());
+  image.removeAttribute("src");
+  image.style.width = "";
+  image.style.height = "";
+  image.style.maxWidth = "";
+  image.style.maxHeight = "";
+  canvas.style.width = "";
+  canvas.style.height = "";
   updatePreviewButtons();
   $("imagePreview").showModal();
+  image.src = "/preview?fsid=" + encodeURIComponent(fsid);
 }
 
 async function previewImageAt(index) {
@@ -450,36 +507,38 @@ async function previewImageAt(index) {
   await openImage(itemFsid(item), itemName(item));
 }
 
-function setImageZoom(value) {
+function fitImageToStage() {
+  setImageZoom(1, true);
+}
+
+function setImageZoom(value, forceCenter = false) {
   const stage = $("previewStage");
-  const oldScrollWidth = Math.max(stage.scrollWidth, stage.clientWidth);
-  const oldScrollHeight = Math.max(stage.scrollHeight, stage.clientHeight);
-  const centerX = oldScrollWidth > stage.clientWidth
-    ? (stage.scrollLeft + stage.clientWidth / 2) / oldScrollWidth
-    : .5;
-  const centerY = oldScrollHeight > stage.clientHeight
-    ? (stage.scrollTop + stage.clientHeight / 2) / oldScrollHeight
-    : .5;
-  imageZoom = Math.max(.2, Math.min(8, value));
+  const canvas = $("previewCanvas");
   const image = $("previewImage");
+  const oldWidth = Math.max(canvas.offsetWidth, stage.clientWidth, 1);
+  const oldHeight = Math.max(canvas.offsetHeight, stage.clientHeight, 1);
+  const centerX = forceCenter ? .5 : (stage.scrollLeft + stage.clientWidth / 2) / oldWidth;
+  const centerY = forceCenter ? .5 : (stage.scrollTop + stage.clientHeight / 2) / oldHeight;
+  imageZoom = Math.max(.2, Math.min(8, value));
   image.classList.toggle("is-zoomed", imageZoom !== 1);
   stage.classList.toggle("is-zoomed", imageZoom !== 1);
-  if (imageZoom === 1) {
-    image.style.width = "";
-    image.style.height = "";
-    image.style.maxWidth = "";
-    image.style.maxHeight = "";
-    stage.scrollLeft = 0;
-    stage.scrollTop = 0;
+  if (!image.naturalWidth || !image.naturalHeight || !stage.clientWidth || !stage.clientHeight) {
     return;
   }
-  image.style.width = `${imageZoom * 100}%`;
-  image.style.height = "auto";
+  const fit = Math.min(stage.clientWidth / image.naturalWidth, stage.clientHeight / image.naturalHeight, 1);
+  const width = Math.max(1, Math.round(image.naturalWidth * fit * imageZoom));
+  const height = Math.max(1, Math.round(image.naturalHeight * fit * imageZoom));
+  canvas.style.width = `${Math.max(stage.clientWidth, width)}px`;
+  canvas.style.height = `${Math.max(stage.clientHeight, height)}px`;
+  image.style.width = `${width}px`;
+  image.style.height = `${height}px`;
   image.style.maxWidth = "none";
   image.style.maxHeight = "none";
   requestAnimationFrame(() => {
-    stage.scrollLeft = Math.max(0, stage.scrollWidth * centerX - stage.clientWidth / 2);
-    stage.scrollTop = Math.max(0, stage.scrollHeight * centerY - stage.clientHeight / 2);
+    const nextWidth = Math.max(canvas.offsetWidth, stage.clientWidth, 1);
+    const nextHeight = Math.max(canvas.offsetHeight, stage.clientHeight, 1);
+    stage.scrollLeft = Math.max(0, nextWidth * centerX - stage.clientWidth / 2);
+    stage.scrollTop = Math.max(0, nextHeight * centerY - stage.clientHeight / 2);
   });
 }
 
@@ -589,7 +648,7 @@ function openContextMenu(item, name, fsid, x, y) {
     if (isVideo(name)) addMenuItem(menu, "播放", () => previewVideo(fsid, name));
     if (isAudio(name)) addMenuItem(menu, "播放", () => previewAudio(fsid, name));
     if (isText(name)) addMenuItem(menu, "预览", () => previewText(fsid, name, item.rel_path));
-    addMenuItem(menu, "下载", () => openDownload(fsid));
+    addMenuItem(menu, "下载", () => openDownload(fsid, name));
     addMenuItem(menu, "分享", () => shareFile(fsid, name));
     if (isText(name)) addMenuItem(menu, "编辑", () => editText(fsid, item.rel_path));
   }
@@ -645,6 +704,15 @@ async function editText(fsid, path) {
 
 document.querySelectorAll(".nav").forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
 $("selectAll").onchange = (e) => setAllSelected(e.target.checked);
+$("pageSize").onchange = (e) => {
+  pageSize = Number(e.target.value) || 50;
+  currentPage = 1;
+  renderFilePage();
+};
+$("firstPage").onclick = () => goPage(1);
+$("prevPage").onclick = () => goPage(currentPage - 1);
+$("nextPage").onclick = () => goPage(currentPage + 1);
+$("lastPage").onclick = () => goPage(totalPages());
 
 $("reload").onclick = () => loadFiles().catch(err => {
   toast(err.message);
@@ -759,10 +827,16 @@ $("closePreview").onclick = () => $("imagePreview").close();
 $("prevPreview").onclick = () => previewImageAt(previewIndex - 1);
 $("nextPreview").onclick = () => previewImageAt(previewIndex + 1);
 $("zoomOut").onclick = () => setImageZoom(imageZoom - .2);
-$("zoomReset").onclick = () => setImageZoom(1);
+$("zoomReset").onclick = () => fitImageToStage();
 $("zoomIn").onclick = () => setImageZoom(imageZoom + .2);
+$("togglePreviewMax").onclick = () => {
+  const dialog = $("imagePreview");
+  const maximized = dialog.classList.toggle("is-maximized");
+  $("togglePreviewMax").textContent = maximized ? "还原" : "最大化";
+  requestAnimationFrame(() => setImageZoom(imageZoom, true));
+};
 $("previewDownload").onclick = () => {
-  if (previewFile) openDownload(previewFile.fsid);
+  if (previewFile) openDownload(previewFile.fsid, previewFile.name);
 };
 $("previewShare").onclick = () => {
   if (previewFile) shareFile(previewFile.fsid, previewFile.name);
@@ -771,7 +845,7 @@ $("closeVideo").onclick = () => $("videoPreview").close();
 $("prevVideo").onclick = () => previewVideoAt(videoIndex - 1);
 $("nextVideo").onclick = () => previewVideoAt(videoIndex + 1);
 $("videoDownload").onclick = () => {
-  if (videoFile) openDownload(videoFile.fsid);
+  if (videoFile) openDownload(videoFile.fsid, videoFile.name);
 };
 $("videoShare").onclick = () => {
   if (videoFile) shareFile(videoFile.fsid, videoFile.name);
@@ -780,14 +854,14 @@ $("closeAudio").onclick = () => $("audioPreview").close();
 $("prevAudio").onclick = () => previewAudioAt(audioIndex - 1);
 $("nextAudio").onclick = () => previewAudioAt(audioIndex + 1);
 $("audioDownload").onclick = () => {
-  if (audioFile) openDownload(audioFile.fsid);
+  if (audioFile) openDownload(audioFile.fsid, audioFile.name);
 };
 $("audioShare").onclick = () => {
   if (audioFile) shareFile(audioFile.fsid, audioFile.name);
 };
 $("closeText").onclick = () => $("textPreview").close();
 $("textDownload").onclick = () => {
-  if (textFile) openDownload(textFile.fsid);
+  if (textFile) openDownload(textFile.fsid, textFile.name);
 };
 $("editPreviewText").onclick = () => {
   if (!textFile) return;
@@ -796,7 +870,7 @@ $("editPreviewText").onclick = () => {
 };
 $("previewStage").onwheel = (e) => {
   e.preventDefault();
-  setImageZoom(imageZoom + (e.deltaY < 0 ? .15 : -.15));
+  setImageZoom(imageZoom + (e.deltaY < 0 ? .15 : -.15), true);
 };
 $("previewStage").addEventListener("pointerdown", (e) => {
   if (e.button !== undefined && e.button !== 0) return;
