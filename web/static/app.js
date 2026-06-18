@@ -247,7 +247,6 @@ async function loadFiles(path = currentPath) {
   renderPathCrumbs(currentPath);
   const data = await api("/api/files?path=" + encodeURIComponent(currentPath));
   selected.clear();
-  updateSelectionHint();
   const tbody = $("files");
   tbody.innerHTML = "";
   const items = data.list || [];
@@ -265,7 +264,7 @@ async function loadFiles(path = currentPath) {
     const kind = fileKind(name, item.isdir);
     tr.dataset.path = item.rel_path;
     tr.innerHTML = `
-      <td><input type="checkbox" data-path="${escapeAttr(item.rel_path)}"></td>
+      <td class="select-col"><input class="row-select" type="checkbox" data-path="${escapeAttr(item.rel_path)}" aria-label="选择 ${escapeAttr(name)}"></td>
       <td><button class="file-name" title="${escapeAttr(name)}"><span class="file-icon ${kind.cls}" aria-hidden="true"><span></span></span><span class="file-main"><strong>${escapeAttr(name)}</strong><small>${kind.label}</small></span></button></td>
       <td>${item.isdir ? "-" : escapeAttr(item.size_text)}</td>
       <td>${escapeAttr(item.mtime_text || "")}</td>
@@ -273,6 +272,7 @@ async function loadFiles(path = currentPath) {
     tr.querySelector("input").onchange = (e) => {
       e.target.checked ? selected.add(item.rel_path) : selected.delete(item.rel_path);
       updateSelectionHint();
+      syncSelectAll();
     };
     tr.querySelector(".file-name").onclick = () => openFile(item, name, fsid);
     const downloadBtn = tr.querySelector(".download-btn");
@@ -288,6 +288,8 @@ async function loadFiles(path = currentPath) {
     };
     tbody.appendChild(tr);
   }
+  updateSelectionHint();
+  syncSelectAll();
 }
 
 function itemName(item) {
@@ -320,7 +322,30 @@ function addCrumb(parent, label, path) {
 }
 
 function updateSelectionHint() {
-  $("selectionHint").textContent = selected.size ? `已选择 ${selected.size} 项` : "未选择项目";
+  const total = currentItems.length;
+  $("selectionHint").textContent = selected.size ? `已选择 ${selected.size} / ${total} 项` : "未选择项目";
+}
+
+function syncSelectAll() {
+  const checkAll = $("selectAll");
+  if (!checkAll) return;
+  const total = currentItems.length;
+  const count = currentItems.reduce((sum, item) => sum + (selected.has(item.rel_path) ? 1 : 0), 0);
+  checkAll.checked = total > 0 && count === total;
+  checkAll.indeterminate = count > 0 && count < total;
+  checkAll.disabled = total === 0;
+}
+
+function setAllSelected(checked) {
+  selected.clear();
+  if (checked) {
+    currentItems.forEach(item => selected.add(item.rel_path));
+  }
+  document.querySelectorAll("#files .row-select").forEach(input => {
+    input.checked = checked;
+  });
+  updateSelectionHint();
+  syncSelectAll();
 }
 
 function addAction(parent, text, fn) {
@@ -426,22 +451,36 @@ async function previewImageAt(index) {
 }
 
 function setImageZoom(value) {
+  const stage = $("previewStage");
+  const oldScrollWidth = Math.max(stage.scrollWidth, stage.clientWidth);
+  const oldScrollHeight = Math.max(stage.scrollHeight, stage.clientHeight);
+  const centerX = oldScrollWidth > stage.clientWidth
+    ? (stage.scrollLeft + stage.clientWidth / 2) / oldScrollWidth
+    : .5;
+  const centerY = oldScrollHeight > stage.clientHeight
+    ? (stage.scrollTop + stage.clientHeight / 2) / oldScrollHeight
+    : .5;
   imageZoom = Math.max(.2, Math.min(8, value));
   const image = $("previewImage");
   image.classList.toggle("is-zoomed", imageZoom !== 1);
+  stage.classList.toggle("is-zoomed", imageZoom !== 1);
   if (imageZoom === 1) {
     image.style.width = "";
     image.style.height = "";
     image.style.maxWidth = "";
     image.style.maxHeight = "";
-    $("previewStage").scrollLeft = 0;
-    $("previewStage").scrollTop = 0;
+    stage.scrollLeft = 0;
+    stage.scrollTop = 0;
     return;
   }
   image.style.width = `${imageZoom * 100}%`;
   image.style.height = "auto";
   image.style.maxWidth = "none";
   image.style.maxHeight = "none";
+  requestAnimationFrame(() => {
+    stage.scrollLeft = Math.max(0, stage.scrollWidth * centerX - stage.clientWidth / 2);
+    stage.scrollTop = Math.max(0, stage.scrollHeight * centerY - stage.clientHeight / 2);
+  });
 }
 
 function updatePreviewButtons() {
@@ -605,6 +644,7 @@ async function editText(fsid, path) {
 }
 
 document.querySelectorAll(".nav").forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
+$("selectAll").onchange = (e) => setAllSelected(e.target.checked);
 
 $("reload").onclick = () => loadFiles().catch(err => {
   toast(err.message);
@@ -758,17 +798,20 @@ $("previewStage").onwheel = (e) => {
   e.preventDefault();
   setImageZoom(imageZoom + (e.deltaY < 0 ? .15 : -.15));
 };
-$("previewStage").onmousedown = (e) => {
-  if (e.button !== 0) return;
+$("previewStage").addEventListener("pointerdown", (e) => {
+  if (e.button !== undefined && e.button !== 0) return;
+  const stage = $("previewStage");
   dragState = {
+    pointerId: e.pointerId,
     x: e.clientX,
     y: e.clientY,
-    left: $("previewStage").scrollLeft,
-    top: $("previewStage").scrollTop
+    left: stage.scrollLeft,
+    top: stage.scrollTop
   };
-  $("previewStage").classList.add("is-dragging");
+  stage.classList.add("is-dragging");
+  if (stage.setPointerCapture) stage.setPointerCapture(e.pointerId);
   e.preventDefault();
-};
+});
 $("videoPreview").addEventListener("close", () => {
   const video = $("previewVideo");
   video.pause();
@@ -802,15 +845,21 @@ document.addEventListener("keydown", (e) => {
   if ($("audioPreview").open && e.key === "ArrowLeft") previewAudioAt(audioIndex - 1);
   if ($("audioPreview").open && e.key === "ArrowRight") previewAudioAt(audioIndex + 1);
 });
-document.addEventListener("mousemove", (e) => {
-  if (!dragState) return;
-  $("previewStage").scrollLeft = dragState.left - (e.clientX - dragState.x);
-  $("previewStage").scrollTop = dragState.top - (e.clientY - dragState.y);
+$("previewStage").addEventListener("pointermove", (e) => {
+  if (!dragState || dragState.pointerId !== e.pointerId) return;
+  const stage = $("previewStage");
+  stage.scrollLeft = dragState.left - (e.clientX - dragState.x);
+  stage.scrollTop = dragState.top - (e.clientY - dragState.y);
 });
-document.addEventListener("mouseup", () => {
+
+function endPreviewDrag(e) {
+  if (dragState && e && e.pointerId !== dragState.pointerId) return;
   dragState = null;
   $("previewStage").classList.remove("is-dragging");
-});
+}
+$("previewStage").addEventListener("pointerup", endPreviewDrag);
+$("previewStage").addEventListener("pointercancel", endPreviewDrag);
+$("previewStage").addEventListener("lostpointercapture", endPreviewDrag);
 
 function uploadFile(file, index, total) {
   return new Promise((resolve, reject) => {

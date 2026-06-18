@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>度盘</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=20260616-auth-auto">
+  <link rel="stylesheet" href="/static/style.css?v=20260617-ios-preview">
 </head>
 <body class="login-mode">
   <div id="appShell" class="app-shell">
@@ -66,7 +66,7 @@
           <span id="selectionHint">未选择项目</span>
         </div>
         <table>
-          <thead><tr><th></th><th>名称</th><th>大小</th><th>修改时间</th><th>下载</th></tr></thead>
+          <thead><tr><th class="select-col"><input id="selectAll" type="checkbox" aria-label="全选文件"></th><th>名称</th><th>大小</th><th>修改时间</th><th>下载</th></tr></thead>
           <tbody id="files"></tbody>
         </table>
         <div id="empty" class="empty">当前目录为空</div>
@@ -243,6 +243,6 @@
 
   <label id="uploadFab" class="upload-fab" title="上传文件">+<input id="file" type="file" multiple></label>
   <div id="toast"></div>
-  <script src="/static/app.js?v=20260616-auth-auto"></script>
+  <script src="/static/app.js?v=20260617-ios-preview"></script>
 </body>
 </html>

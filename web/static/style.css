@@ -775,6 +775,125 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.select-col {
+  width: 46px;
+  text-align: center;
+}
+
+th.select-col, td.select-col {
+  padding-left: 14px;
+  padding-right: 8px;
+}
+
+.select-col input[type="checkbox"], #selectAll {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.select-col input[type="checkbox"]:disabled, #selectAll:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.image-preview, .video-preview, .audio-preview, .text-preview {
+  border: 1px solid rgba(209, 217, 226, .72);
+  border-radius: 24px;
+  background: rgba(250, 250, 252, .96);
+  color: rgb(17, 24, 39);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+}
+
+.image-preview::backdrop, .video-preview::backdrop, .audio-preview::backdrop, .text-preview::backdrop {
+  background: rgba(17, 24, 39, .42);
+  backdrop-filter: blur(12px);
+}
+
+.image-preview header, .video-preview header, .audio-preview header, .text-preview header {
+  min-height: 58px;
+  padding: 10px 12px;
+  background: rgba(250, 250, 252, .86);
+  border-bottom: 1px solid rgba(216, 222, 231, .78);
+  backdrop-filter: blur(18px);
+}
+
+.image-preview h2, .video-preview h2, .audio-preview h2, .text-preview h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.preview-tools {
+  gap: 6px;
+}
+
+.preview-tools button, .image-preview footer button, .video-preview footer button, .audio-preview footer button {
+  min-width: 44px;
+  height: 34px;
+  border-radius: 999px;
+  padding: 0 12px;
+  border-color: rgba(205, 213, 224, .9);
+  background: rgba(255, 255, 255, .82);
+  color: rgb(17, 24, 39);
+}
+
+.preview-tools button:hover, .image-preview footer button:hover, .video-preview footer button:hover, .audio-preview footer button:hover {
+  background: rgb(255, 255, 255);
+}
+
+.image-preview footer button:not(.ghost), .video-preview footer button:not(.ghost), .audio-preview footer button:not(.ghost) {
+  border-color: rgb(0, 122, 255);
+  background: rgb(0, 122, 255);
+  color: rgb(255, 255, 255);
+}
+
+.image-preview footer, .video-preview footer, .audio-preview footer {
+  background: rgba(250, 250, 252, .9);
+  border-top: 1px solid rgba(216, 222, 231, .78);
+  backdrop-filter: blur(18px);
+}
+
+.preview-stage {
+  background: rgb(3, 3, 3);
+  overscroll-behavior: contain;
+  touch-action: none;
+  -webkit-user-select: none;
+}
+
+.preview-stage.is-zoomed {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.preview-stage img {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.preview-stage img.is-zoomed {
+  margin: 0;
+  max-width: none;
+  max-height: none;
+}
+
+.video-stage {
+  background: rgb(3, 3, 3);
+}
+
+.video-stage video {
+  object-fit: contain;
+}
+
+.audio-stage {
+  background: rgb(245, 246, 250);
+}
+
+.text-content {
+  background: rgb(17, 19, 24);
+  color: rgb(243, 244, 246);
+}
+
 .login-overlay {
   position: fixed;
   inset: 0;
